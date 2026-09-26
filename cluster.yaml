@@ -1,0 +1,19 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: qdrant-local-cluster
+nodes:
+  - role: control-plane
+  - role: worker
+    extraPortMappings:
+      - containerPort: 30333
+        hostPort: 6333
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      - containerPort: 30334
+        hostPort: 6334
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+    extraMounts:
+      # Mount a local host directory into the KinD node to act as persistent disk storage
+      - hostPath: ./kind-storage/qdrant
+        containerPath: /var/local-path-provisioner

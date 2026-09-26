@@ -1,0 +1,72 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: mixed-pool
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  replicas: 1
+  roles:
+    - controller
+    - broker
+  storage:
+    type: ephemeral # Keeps disk mapping operations lightweight inside KinD nodes
+  resources:
+    limits:
+      cpu: "1"
+      memory: 2Gi
+    requests:
+      cpu: "500m"
+      memory: 1Gi
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: my-cluster
+  namespace: kafka
+spec:
+  kafka:
+    version: 4.3.1 # FIXED: Matches supported cluster engine specifications
+    metadataVersion: 4.3-IV0 # Updated to match Kafka 4.3 metadata protocols
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      # "plain" above only resolves in-cluster (its advertised address is the broker's internal
+      # svc DNS name), so any host-side client -- like ai-worker/main.py -- gets redirected there
+      # after its first metadata fetch and fails to resolve it. This second listener exists purely
+      # so host clients can reach the broker: it advertises "localhost", which a single
+      # `kubectl port-forward pod/my-cluster-mixed-pool-0 9094:9094 -n kafka` satisfies for both
+      # the initial bootstrap connection AND the post-metadata redirect (same host:port either way).
+      - name: external
+        port: 9094
+        type: nodeport
+        tls: false
+        configuration:
+          brokers:
+            - broker: 0 # confirmed via: kubectl get kafkanodepool mixed-pool -n kafka -o jsonpath='{.status.nodeIds}'
+              advertisedHost: localhost
+              advertisedPort: 9094
+  # Without this, KafkaTopic CRs (like k8s-cluster-alerts below) are never reconciled --
+  # no controller is watching them, so they stay as inert CRs and no real topic gets created.
+  entityOperator:
+    topicOperator: {}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: k8s-cluster-alerts
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  partitions: 1
+  replicas: 1

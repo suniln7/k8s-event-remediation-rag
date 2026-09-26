@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# macOS
+.DS_Store
+
+# Runtime state (regenerated locally by running the project, not part of the portfolio)
+kind-storage/
+ai-worker/output/
+
+# Local config -- see ai-worker/.env.example for the template (no real secrets live here;
+# everything points at unauthenticated localhost endpoints, but keep the habit anyway)
+.env

@@ -1,0 +1,36 @@
+# Qdrant Rancher Desktop Fixed Values
+replicaCount: 1
+
+resources:
+  limits:
+    cpu: "2"
+    memory: 4Gi
+  requests:
+    cpu: "1"
+    memory: 1Gi
+
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClassName: "standard" 
+
+# SCHEMA-COMPLIANT SERVICE STRUCTURE
+service:
+  type: NodePort
+  ports:
+    - name: http
+      port: 6333
+      targetPort: 6333
+      protocol: TCP
+      nodePort: 30333
+    - name: grpc
+      port: 6334
+      targetPort: 6334
+      protocol: TCP
+      nodePort: 30334
+
+config:
+  cluster:
+    enabled: false
+  telemetry:
+    disabled: true

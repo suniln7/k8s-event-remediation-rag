@@ -1,0 +1,43 @@
+global:
+  security:
+    allowInsecureImages: true
+
+# 2. FIXED: Point to the functional upstream GitHub image tag
+image:
+  registry: ghcr.io
+  repository: resmoio/kubernetes-event-exporter
+  tag: "v1.7" # Confirmed valid via ghcr.io tag list -- "1.7" and "v1.7.0" don't exist, only "v1.7"
+
+# 3. Stream data mechanics mapped to your active Kafka cluster
+config:
+  logLevel: error # verified end-to-end (real Warning events confirmed landing in k8s-cluster-alerts) -- back to error
+  logFormat: json
+  # Default is 5s. On exporter (re)start, the k8s informer does a full LIST replay of existing
+  # events -- anything already a few seconds old at that point (like our test event) blew past the
+  # 5s window and was silently dropped ("Event discarded as being older then maxEventAgeSeconds").
+  # Bumped to 60s so a restart's replay doesn't lose real Warning events before the AI agent sees them.
+  # Note: this discard log line is Warn level -- with logLevel:error below, silent drops go unseen.
+  # If events look missing later, set logLevel:warn first to check for this.
+  maxEventAgeSeconds: 60
+  route:
+    routes:
+      # `receiver` must live INSIDE the match rule, not as a sibling of `match`/`drop`.
+      # The upstream Route struct has no top-level Receiver field, so it was being silently dropped
+      # (matching events had nowhere to go -- no crash, just zero messages reaching Kafka).
+      - match:
+          - type: "Warning"
+            receiver: "kafka-alerts"
+  receivers:
+    - name: kafka-alerts
+      kafka:
+        topic: k8s-cluster-alerts
+        # Required: the sink does `saramaConfig.ClientID = cfg.ClientId` unconditionally, overwriting
+        # Sarama's own healthy default with whatever we give it. We gave it nothing -> empty string ->
+        # Sarama's config validation rejects it: fatal "kafka: invalid configuration (ClientID is invalid)".
+        clientId: "k8s-event-exporter"
+        # brokers must be a plain list of "host:port" strings.
+        # "host: port" (space after colon) parses as a YAML map entry, not a string -- invalid.
+        brokers:
+          - "my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+        # async/batchSize removed: not real KafkaConfig fields upstream (unknown keys are silently
+        # ignored) -- this sink always uses a synchronous producer.
